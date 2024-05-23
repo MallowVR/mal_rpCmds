@@ -1,5 +1,9 @@
 RegisterCommand("status", function(source, args)
     local message = table.concat(args, " "):gsub("%s+","")
-
     TriggerClientEvent("Mallow:status", -1, message, source)
+end)
+RegisterCommand("action", function(source, args)
+    local message = table.concat(args, " "):gsub("%s+","")
+    local attempt = math.floor(math.random(Config.weight) / 50)
+    TriggerClientEvent("Mallow:action", -1, message, source, attempt)
 end)

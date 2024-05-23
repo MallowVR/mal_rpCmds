@@ -14,7 +14,7 @@ description ''
 shared_scripts {
     'config/client.lua',
     '@ox_lib/init.lua',
-    '@qbx_core/modules/lib.lua',
+    --'@qbx_core/modules/lib.lua',
     'ox_target/client/state.lua',
 }
 
