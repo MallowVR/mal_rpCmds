@@ -45,7 +45,7 @@ local function drawStatuses()
         local i = next(status, nil)
         while visible and i do
             if status[i] ~= nil and status[i].near == true then
-                local coords = GetEntityCoords(i)
+                local coords = GetEntityCoords(GetPlayerPed(i))
                 draw3dText({
                     text = status[i].text,
                     coords = vec3(coords.x, coords.y, coords.z + status[i].height),
@@ -89,12 +89,12 @@ local function drawActions()
     end
 end
 
-local function setStatus(_ped, _text, _height)
-    if _text:sub(1,2) == "  " then
-        status[_ped] = nil
+local function setStatus(_player, _text, _height)
+    if _text == "" then
+        status[_player] = nil
         return
     end
-    status[_ped] = {
+    status[_player] = {
         text = _text,
         height = _height,
         near = false,
@@ -102,7 +102,7 @@ local function setStatus(_ped, _text, _height)
 end
 
 local function setAction(_ped, _text, _attempt, _height)
-    if _text:sub(1,2) == "  " then
+    if _text == "" then
         action[_ped] = nil
         return
     end
@@ -112,10 +112,15 @@ local function setAction(_ped, _text, _attempt, _height)
         result = 'Success'
         c = Config.successColor
     end
+    local dist = #(GetEntityCoords(GetPlayerPed(PlayerId())) - GetEntityCoords(GetPlayerPed(_ped)))
+    local nearVar = false
+    if dist < Config.radius then
+        nearVar = true
+    end
     action[_ped] = {
         text = _text,
         height = _height,
-        near = false,
+        near = nearVar,
         timer = GetGameTimer() + Config.duration,
         attempt = result,
         color = c
@@ -126,10 +131,7 @@ end
 local function onStatus(_text, _source)
     local player = GetPlayerFromServerId(_source)
     if player ~= -1 then
-        local ped = GetPlayerPed(player)
-        --print('' .. _source .. ' ' .. player .. ' ' .. ped)
-        setStatus(ped, " " .. _text .. " ", 0)
-        print(''..ped)
+        setStatus(player, "" .. _text .. "", 0)
     end
 end
 
@@ -137,7 +139,7 @@ local function onAction(_text, _source, _attempt)
     local player = GetPlayerFromServerId(_source)
     if player ~= -1 then
         local ped = GetPlayerPed(player)
-        setAction(ped, ' ' .. _text .. ' ', _attempt, 1)
+        setAction(ped, "" .. _text .. "", _attempt, 1)
         if actionThread == false then
             CreateThread(function()
                 drawActions()
@@ -149,13 +151,21 @@ end
 RegisterNetEvent('Mallow:status', onStatus)
 RegisterNetEvent('Mallow:action', onAction)
 
+
+AddEventHandler('onClientResourceStart', function(_resourceName)
+    if _resourceName == 'mal_rpCmds' then
+        Citizen.Wait(120000) -- wait 2 minutes before asking for data from server
+        TriggerServerEvent("Mallow:sync", GetPlayerServerId(PlayerId())) -- request list of current statuses from server
+    end
+end)
+
 CreateThread(function()
     while true do
         if next(status, nil) ~= nil then
-            local clientCoords = GetEntityCoords(cache.ped)
+            local clientCoords = GetEntityCoords(GetPlayerPed(PlayerId()))
             local i = next(status, nil)
             while i do
-                local coords = GetEntityCoords(i)
+                local coords = GetEntityCoords(GetPlayerPed(i))
                 local dist = #(clientCoords - coords)
                 if dist < Config.radius then
                     status[i].near = true
