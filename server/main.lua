@@ -42,6 +42,6 @@ end)
 
 RegisterCommand("action", function(source, args)
     local message = table.concat(args, " "):gsub("%s%s+","")
-    local attempt = math.floor(math.random(Config.weight) / 50)
+    local attempt = math.floor(math.random(100) / Config.weight)
     TriggerClientEvent("Mallow:action", -1, message, source, attempt)
 end)

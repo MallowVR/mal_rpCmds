@@ -111,7 +111,7 @@ local function setAction(_ped, _text, _attempt, _height)
     end
     local result = 'Failure'
     local c = Config.failureColor
-    if _attempt == 1 then
+    if _attempt ~= 0 then
         result = 'Success'
         c = Config.successColor
     end
