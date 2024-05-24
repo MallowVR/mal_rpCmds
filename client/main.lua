@@ -1,6 +1,6 @@
 local status = {}
 local visible = false
-local keyPromise = promise.new()
+local statusPromise = promise.new()
 
 local action = {}
 local actionPromise = promise.new()
@@ -40,6 +40,7 @@ local function draw3dText(params)
 end
 
 local function drawStatuses()
+    Citizen.Await(statusPromise)
     Citizen.Wait(0)
     while visible do
         local i = next(status, nil)
@@ -87,6 +88,7 @@ local function drawActions()
             Citizen.Wait(0)
         end
     end
+    actionThread = false
 end
 
 local function setStatus(_player, _text, _height)
@@ -99,6 +101,7 @@ local function setStatus(_player, _text, _height)
         height = _height,
         near = false,
     }
+    statusPromise:resolve()
 end
 
 local function setAction(_ped, _text, _attempt, _height)
@@ -144,6 +147,7 @@ local function onAction(_text, _source, _attempt)
             CreateThread(function()
                 drawActions()
             end)
+            actionThread = true
         end
     end
 end
@@ -161,6 +165,7 @@ end)
 
 CreateThread(function()
     while true do
+        Citizen.Await(statusPromise)
         if next(status, nil) ~= nil then
             local clientCoords = GetEntityCoords(GetPlayerPed(PlayerId()))
             local i = next(status, nil)
@@ -174,6 +179,8 @@ CreateThread(function()
                 end
                 i = next(status, i)
             end
+        else
+            statusPromise = promise.new()
         end
         Citizen.Wait(1000)
     end
@@ -181,8 +188,8 @@ end)
 
 CreateThread(function()
     while true do
-        local clientCoords = GetEntityCoords(cache.ped)
         Citizen.Await(actionPromise)
+        local clientCoords = GetEntityCoords(cache.ped)
         local i = next(action, nil)
         while i do
             if GetGameTimer() > action[i].timer then
@@ -203,7 +210,7 @@ CreateThread(function()
             end
             i = next(action, i)
         end
-        Citizen.Wait(100)
+        Citizen.Wait(250) -- quarter second delay before it calculates nearness again
     end
 end)
 

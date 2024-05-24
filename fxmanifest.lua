@@ -29,7 +29,6 @@ files {
 }
 
 dependency 'ox_lib'
-dependency 'qbx_core'
 dependency 'ox_target'
 
 lua54 'yes'
