@@ -6,12 +6,15 @@ local action = {}
 local actionPromise = promise.new()
 local actionThread = false
 
+ReplaceHudColourWithRgba(232, Config.successColor.r, Config.successColor.g, Config.successColor.b, Config.successColor.a) -- replaces HUD_COLOUR_PLACEHOLDER_09
+ReplaceHudColourWithRgba(233, Config.failureColor.r, Config.failureColor.g, Config.failureColor.b, Config.failureColor.a) -- replaces HUD_COLOUR_PLACEHOLDER_10
+
 local function draw3dText(params)
     local text = params.text
     local coords = params.coords
     local camCoords = GetGameplayCamCoord()
     local dist = #(coords - camCoords)
-    local scale = params.scale or (200 / (GetGameplayCamFov() * dist)) ^ 0.5
+    local scale = params.scale or (200 / (GetGameplayCamFov() * dist) * 0.7)
     local font = params.font or Config.font
     local color = params.color or Config.color
     local line = params.line or 0
@@ -28,7 +31,7 @@ local function draw3dText(params)
     SetTextColour(math.floor(color.r), math.floor(color.g), math.floor(color.b), math.floor(color.a))
     SetTextCentre(true)
     BeginTextCommandDisplayText('STRING')
-    AddTextComponentSubstringPlayerName(text)
+    AddTextComponentString(text)
     SetDrawOrigin(coords.x, coords.y, coords.z, 0)
     EndTextCommandDisplayText(0.0, 0.0)
 
@@ -37,6 +40,18 @@ local function draw3dText(params)
         DrawRect(0.0, 0.0125, 0.017 + factor, 0.03, 0, 0, 0, 75)
     end
     ClearDrawOrigin()
+end
+
+function DiceRollAnimation()
+    RequestAnimDict("anim@mp_player_intcelebrationmale@wank") --Request animation dict.
+
+    while (not HasAnimDictLoaded("anim@mp_player_intcelebrationmale@wank")) do --Waits till it has been loaded.
+        Citizen.Wait(0)
+    end
+    local globalPlayerPedId = GetPlayerPed(PlayerId())
+    TaskPlayAnim(globalPlayerPedId, "anim@mp_player_intcelebrationmale@wank" ,"wank" ,8.0, -8.0, -1, 49, 0, false, false, false ) --Plays the animation.
+    Citizen.Wait(2400)
+    ClearPedTasks(globalPlayerPedId)
 end
 
 local function drawStatuses()
@@ -68,18 +83,11 @@ local function drawActions()
     local i = next(action, nil)
     while i do
         if action[i] ~= nil and action[i].near == true then
-            local coords = GetEntityCoords(i)
+            local coords = GetEntityCoords(GetPlayerPed(i))
             draw3dText({
                 text = action[i].text,
                 coords = vec3(coords.x, coords.y, coords.z + action[i].height),
                 disableDrawRect = true,
-            })
-            draw3dText({
-                text = action[i].attempt,
-                coords = vec3(coords.x, coords.y, coords.z + action[i].height),
-                disableDrawRect = true,
-                line = -1,
-                color = action[i].color,
             })
         end
         i = next(action, i)
@@ -89,11 +97,13 @@ local function drawActions()
         end
     end
     actionThread = false
+    actionPromise = promise.new()
 end
 
 local function setStatus(_player, _text, _height)
     if _text == "" then
         status[_player] = nil
+        TriggerEvent('chatMessage', 'SYSTEM', 'error', 'Clearing status')
         return
     end
     status[_player] = {
@@ -104,29 +114,21 @@ local function setStatus(_player, _text, _height)
     statusPromise:resolve()
 end
 
-local function setAction(_ped, _text, _attempt, _height)
+local function setAction(_player, _text, _height)
     if _text == "" then
-        action[_ped] = nil
+        action[_player] = nil
         return
     end
-    local result = 'Failure'
-    local c = Config.failureColor
-    if _attempt ~= 0 then
-        result = 'Success'
-        c = Config.successColor
-    end
-    local dist = #(GetEntityCoords(GetPlayerPed(PlayerId())) - GetEntityCoords(GetPlayerPed(_ped)))
+    local dist = #(GetEntityCoords(GetPlayerPed(PlayerId())) - GetEntityCoords(GetPlayerPed(_player)))
     local nearVar = false
     if dist < Config.radius then
         nearVar = true
     end
-    action[_ped] = {
+    action[_player] = {
         text = _text,
         height = _height,
         near = nearVar,
         timer = GetGameTimer() + Config.duration,
-        attempt = result,
-        color = c
     }
     actionPromise:resolve()
 end
@@ -140,9 +142,56 @@ end
 
 local function onAction(_text, _source, _attempt)
     local player = GetPlayerFromServerId(_source)
+    local string = _text
+    if Config.crits and _attempt <= Config.critRange then
+        string = string..' [~HC_233~Critical Failure~s~]'
+    elseif Config.crits and _attempt > (100 - Config.critRange) then
+        string = string..' [~HC_232~Critical Success~s~]'
+    elseif _attempt > Config.weight then
+        string = string..' [~HC_232~Success~s~]'
+    else
+        string = string..' [~HC_233~Failure~s~]'
+    end
     if player ~= -1 then
-        local ped = GetPlayerPed(player)
-        setAction(ped, "" .. _text .. "", _attempt, 1)
+        setAction(player, "" .. string .. "", 1)
+        if actionThread == false then
+            CreateThread(function()
+                drawActions()
+            end)
+            actionThread = true
+        end
+    end
+end
+
+local function onMe(_text, _source)
+    local player = GetPlayerFromServerId(_source)
+    if player ~= -1 then
+        setAction(player, "" .. _text .. "", 1)
+        if actionThread == false then
+            CreateThread(function()
+                drawActions()
+            end)
+            actionThread = true
+        end
+    end
+end
+
+local function onRoll(_rolls, _sides, _source)
+    local player = GetPlayerFromServerId(_source)
+    if player ~= -1 then
+        if GetPlayerServerId(PlayerId()) == _source then --Checks if you you ahve the same source id
+            DiceRollAnimation()
+        end
+        local i = next(_rolls, nil)
+        local total = 0
+        local message = ''
+        while i do
+            total += _rolls[i]
+            message = message.._rolls[i]..' | '
+            i = next(_rolls, i)
+        end
+        message = message..'Sides: '.._sides..' (Total: '..total..')'
+        setAction(player, "" .. message .. "", 1)
         if actionThread == false then
             CreateThread(function()
                 drawActions()
@@ -154,6 +203,8 @@ end
 
 RegisterNetEvent('Mallow:status', onStatus)
 RegisterNetEvent('Mallow:action', onAction)
+RegisterNetEvent('Mallow:me', onMe)
+RegisterNetEvent('Mallow:roll', onRoll)
 
 
 AddEventHandler('onClientResourceStart', function(_resourceName)
@@ -189,7 +240,7 @@ end)
 CreateThread(function()
     while true do
         Citizen.Await(actionPromise)
-        local clientCoords = GetEntityCoords(cache.ped)
+        local clientCoords = GetEntityCoords(GetPlayerPed(PlayerId()))
         local i = next(action, nil)
         while i do
             if GetGameTimer() > action[i].timer then
@@ -201,7 +252,7 @@ CreateThread(function()
                     break
                 end
             end
-            local coords = GetEntityCoords(i)
+            local coords = GetEntityCoords(GetPlayerPed(i))
             local dist = #(clientCoords - coords)
             if dist < Config.radius then
                 action[i].near = true
